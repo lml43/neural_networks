@@ -4,9 +4,11 @@ import random
 
 
 class Layer:
-    def __init__(self, activation, size):
+    def __init__(self, size, activation, derivation, bias):
         self.activation = activation
+        self.derivation = derivation
         self.size = size
+        self.bias = bias
 
 
 # Activation functions
@@ -18,18 +20,51 @@ def logistic_deriv(x):
     return logistic(x) * (1 - logistic(x))
 
 
+def reLU(x):
+    return np.maximum(0, x)
+
+
+def reLU_deriv(x):
+    return np.maximum(0, x)
+
+
+def softmax(x):
+    return np.exp(x) / sum(np.exp(x))
+
+
 # Variables
-learning_rate = 1
+learning_rate = 0.8
 
 I_dim = 2
 H_dim = 4
+O_dim = 2
 
 epoch_count = 100
 batch_size = 16
 
+# Initialise the hidden layers
+hidden_layers = [
+    Layer(10, logistic, logistic_deriv, 0),
+    Layer(12, reLU, reLU_deriv, 0),
+]
+
+# Generate weight matrices with random values in [-0.5, 0.5]
+# The matrices' sizes are corresponding to the layers' sizes
+weight_matrices = []
+
+for i in range(len(hidden_layers)):
+    if i == 0:
+        weight_matrices.append(np.random.rand(hidden_layers[0].size, I_dim) - 0.5)
+    else:
+        weight_matrices.append(np.random.rand(hidden_layers[i].size, hidden_layers[i-1].size) - 0.5)
+
+weight_matrices.append(np.random.rand(O_dim, hidden_layers[-1].size) - 0.5)
+
+# TODO delete in future
 weights_ItoH = np.random.uniform(-1, 1, (I_dim, H_dim))
 weights_HtoO = np.random.uniform(-1, 1, H_dim)
 
+# TODO create arrays
 preActivation_H = np.zeros(H_dim)
 postActivation_H = np.zeros(H_dim)
 
@@ -41,9 +76,8 @@ training_data = training_data.drop(['cls'], axis=1)
 training_data = np.asarray(training_data)
 training_count = len(training_data[:, 0])
 
-#####################
+
 # training
-#####################
 for epoch in range(epoch_count):
     print("\n\nEpoch {}".format(epoch))
 
