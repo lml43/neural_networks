@@ -4,11 +4,10 @@ import random
 
 
 class Layer:
-    def __init__(self, size, activation, derivation, bias):
+    def __init__(self, size, activation, derivation):
         self.activation = activation
         self.derivation = derivation
         self.size = size
-        self.bias = bias
 
 
 # Activation functions
@@ -25,31 +24,75 @@ def reLU(x):
 
 
 def reLU_deriv(x):
-    return np.maximum(0, x)
+    return x > 0
 
 
 def softmax(x):
     return np.exp(x) / sum(np.exp(x))
 
 
+def one_hot(Y):
+    one_hot_Y = np.zeros((Y.size, Y.max()))
+    one_hot_Y[np.arange(Y.size), Y-1] = 1
+    return one_hot_Y
+
+
+def get_predictions(Z):
+    return np.argmax(Z, 0)
+
+
+def get_accuracy(predictions, Y):
+    return np.sum(predictions == Y) / Y.size
+
+
+def forward_propagate(network, weights, training_point):
+    layer_input = training_point
+    pre_activations = []
+    post_activations = [layer_input]
+
+    for i in range(len(network)):
+        layer = network[i]
+
+        pre = np.asarray(np.dot(weights[i], layer_input.T) + bias[i]).reshape(-1)
+        post = layer.activation(pre)
+
+        layer_input = post
+        pre_activations.append(pre)
+        post_activations.append(post)
+
+    f_output = np.zeros(O_dim)
+    for neuron in range(O_dim):
+        f_output[neuron] = np.dot(weights[-1][neuron, :], layer_input)
+
+    return softmax(f_output), pre_activations, post_activations
+
+
+def predict(x):
+    out, _, _ = forward_propagate(hidden_layers, weight_matrices, x)
+    predictions = get_predictions(out)
+    return predictions
+
+
 # Variables
-learning_rate = 0.8
+learning_rate = 0.1
 
 I_dim = 2
 O_dim = 2
 
-epoch_count = 2
-batch_size = 16
+epoch_count = 10
+batch_size = 32
 
 # Initialise the hidden layers
 hidden_layers = [
-    Layer(4, logistic, logistic_deriv, 0),
-    Layer(3, reLU, reLU_deriv, 0),
+    Layer(3, reLU, reLU_deriv),
+    # Layer(4, logistic, logistic_deriv),
+
 ]
 
 # Generate weight matrices with random values in [-0.5, 0.5]
 # The matrices' sizes are corresponding to the layers' sizes
 weight_matrices = []
+bias = np.random.rand(len(hidden_layers) + 1) - 0.5
 
 # TODO check order of dimensions
 for i in range(len(hidden_layers)):
@@ -60,75 +103,79 @@ for i in range(len(hidden_layers)):
 
 weight_matrices.append(np.random.rand(O_dim, hidden_layers[-1].size) - 0.5)
 
-input_file = 'data/classification/data.simple.train.100.csv'
+input_file = 'data/classification/data.simple.train.1000.csv'
 print("Import file {} ...".format(input_file))
-training_data = pandas.read_csv(input_file)
-training_class = training_data.cls
-training_data = training_data.drop(['cls'], axis=1)
-training_data = np.asarray(training_data)
-training_count = len(training_data[:, 0])
+x_train = pandas.read_csv(input_file)
+y_train = x_train.cls
+x_train = x_train.drop(['cls'], axis=1)
+x_train = np.asarray(x_train)
+training_count = len(x_train[:, 0])
 
 
-preActivations = []
-postActivations = []
-
-for i in range(len(hidden_layers)):
-    preActivations.append(np.zeros(hidden_layers[i].size))
-    postActivations.append(np.zeros(hidden_layers[i].size))
+one_hot_y = one_hot(y_train)
 
 
-def forward_propagate(network, weights, training_point):
-    layer_input = training_point
+# Test
+input_file = 'data/classification/data.simple.test.500.csv'
+x_test = pandas.read_csv(input_file)
+y_test = x_test.cls
+x_test = x_test.drop(['cls'], axis=1)
+x_test = np.asarray(x_test)
+test_count = len(x_test[:, 0])
 
-    for i in range(len(network)):
-        layer = network[i]
-        pre = np.zeros(layer.size)
-        post = np.zeros(layer.size)
-
-        for neuron in range(layer.size):
-            pre[neuron] = np.dot(weights[i][neuron, :], layer_input)
-            post[neuron] = layer.activation(pre[neuron])
-
-        layer_input = post
-
-    f_output = np.zeros(O_dim)
-    for neuron in range(O_dim):
-        f_output[neuron] = np.dot(weights[-1][neuron, :], layer_input)
-
-    print(f_output)
-    return f_output.max()
-
+expected = y_test.to_numpy() - 1
 
 # training
 for epoch in range(epoch_count):
-    print("\n\nEpoch {}".format(epoch))
+
+    if epoch % 1 == 0:
+        predictions = []
+        for point in x_test:
+            predictions.append(predict(point))
+
+        acc = get_accuracy(predictions, expected)
+        print("Epoch {}, accuracy: {}".format(epoch, acc))
 
     # Shuffle the array
-    random.shuffle(training_data)
+    # random.shuffle(x_train)
 
     # Iteratively picking up points in a batch
     for index in range(0, training_count, batch_size):
         for point in range(index, min(index + batch_size, training_count)):
-            output = forward_propagate(hidden_layers, weight_matrices, training_data[point, :])
-            error = output - training_class[point]
 
-            #
+            output, pre_activations, post_activations = forward_propagate(hidden_layers, weight_matrices, x_train[point, :])
+
             # Backpropagation
-            # TODO for each layer
-            # for H_node in range(H_dim):
-            #     S_error = error * logistic_deriv(output)
-            #     # TODO try some methods of optimizing
-            #     for I_node in range(I_dim):
-            #         input_value = training_data[point, I_node]
-            #         gradient_ItoH = S_error * weights_HtoO[H_node] * logistic_deriv(preActivations[H_node]) * input_value
-            #         weights_ItoH[I_node, H_node] -= learning_rate * gradient_ItoH
-            #
-            #     gradient_HtoO = S_error * postActivations[H_node]
-            #     weights_HtoO[H_node] -= learning_rate * gradient_HtoO
+            diffW = []
+            diffB = []
 
-    print('I to H:')
-    print(weights_ItoH)
+            dZ = np.matrix(output - one_hot_y[point]).T
+            dW = np.dot(dZ, np.matrix(post_activations[len(hidden_layers)]))
+            dB = np.sum(dZ)
 
-    print()
-    print('H to O:')
-    print(weights_HtoO)
+            diffW.append(dW)
+            diffB.append(dB)
+
+            for i in reversed(range(len(hidden_layers))):
+                layer = hidden_layers[i]
+                dZ = np.asarray(weight_matrices[i+1].T.dot(dZ)).reshape(-1) * layer.derivation(pre_activations[i])
+                dW = np.dot(np.matrix(dZ).T, np.matrix(post_activations[i]))
+                dB = np.sum(dZ)
+
+                diffW.append(dW)
+                diffB.append(dB)
+
+            diffW.reverse()
+            diffB.reverse()
+
+            for i in range(len(weight_matrices)):
+                weight_matrices[i] = weight_matrices[i] - learning_rate * diffW[i]
+                bias[i] = bias[1] - learning_rate * diffB[i]
+
+    # print(weight_matrices[0])
+
+
+
+
+
+
