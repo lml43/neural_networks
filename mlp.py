@@ -35,7 +35,7 @@ class Layer:
 
     @staticmethod
     def gauss(x):
-        return np.exp(-x*x)
+        return np.exp(-x * x)
 
     @staticmethod
     def gauss_deriv(x):
@@ -70,8 +70,9 @@ class NeuralNetwork:
         self.weights = []
         self.bias = []
 
+        np.random.seed(1)
         for i in range(len(self.layers)):
-            self.bias.append(np.zeros(self.layers[i].size))
+            self.bias.append(np.zeros((self.layers[i].size, 1)))
             if i == 0:
                 self.weights.append(np.random.rand(self.layers[0].size, self.I_dim) - 0.5)
             else:
@@ -94,12 +95,15 @@ class NeuralNetwork:
         return np.argmax(Z, 0)
 
     def get_accuracy(self, predictions, Y):
+        # print()
+        # print(predictions)
+        # print(Y)
         return np.sum(predictions == Y) / Y.size
 
     def forward_propagate(self, layers, weights, bias, training_point):
         layer_input = training_point
         pre_activations = []
-        post_activations = [layer_input]
+        post_activations = []
 
         for i in range(len(layers)):
             layer = layers[i]
@@ -115,13 +119,13 @@ class NeuralNetwork:
 
     def predict(self, x):
         out, _, _ = self.forward_propagate(self.layers, self.weights, self.bias, x)
+
         predictions = self.get_predictions(out)
         return predictions
 
     def test(self):
         predictions = []
-        for point in range(self.x_test.shape[1]):
-            predictions.append(self.predict(self.x_test[:, point]))
+        predictions.append(self.predict(self.x_test))
 
         acc = self.get_accuracy(predictions, self.expected)
         return acc
@@ -142,35 +146,46 @@ class NeuralNetwork:
 
             # Iteratively picking up points in a batch
             for index in range(0, self.training_count, batch_size):
-                for point in range(index, min(index + batch_size, self.training_count)):
-                    output, pre_activations, post_activations = self.forward_propagate(self.layers, self.weights, self.bias, self.x_train[:, point])
+                input_batch = self.x_train[:, index:min(index + batch_size, self.training_count)]
+                target_batch = self.one_hot_y[:, index:min(index + batch_size, self.training_count)]
+                sample_count = input_batch.shape[1]
 
-                    # Backpropagation
-                    diff_w = []
-                    diff_b = []
+                output, pre_activations, post_activations = self.forward_propagate(self.layers, self.weights,
+                                                                                   self.bias,
+                                                                                   input_batch)
+                # Backpropagation
+                diff_w = []
+                diff_b = []
+                prevA = post_activations[len(self.layers) - 2].T
 
-                    d_z = output - self.one_hot_y[:, point]
-                    d_w = self.dot_vec(d_z, post_activations[len(self.layers)-1])
-                    d_b = np.sum(d_z)
+                d_z = self.layers[-1].derivation(output, target_batch)
+                d_w = np.dot(d_z, prevA) / sample_count
+                d_b = np.sum(d_z) / sample_count
+
+                diff_w.append(d_w)
+                diff_b.append(d_b)
+
+                for i in reversed(range(0, len(self.layers) - 1)):
+                    layer = self.layers[i]
+
+                    if i == 0:
+                        prevA = input_batch.T
+                    else:
+                        prevA = post_activations[i-1].T
+
+                    d_z = self.weights[i+1].T.dot(d_z) * layer.derivation(pre_activations[i])
+                    d_w = np.dot(d_z, prevA) / sample_count
+                    d_b = np.sum(d_z) / sample_count
+
                     diff_w.append(d_w)
                     diff_b.append(d_b)
 
-                    for i in reversed(range(0, len(self.layers)-1)):
-                        layer = self.layers[i]
+                diff_w.reverse()
+                diff_b.reverse()
 
-                        d_z = self.weights[i + 1].T.dot(d_z) * layer.derivation(pre_activations[i])
-                        d_w = self.dot_vec(d_z, post_activations[i])
-                        d_b = np.sum(d_z)
-
-                        diff_w.append(d_w)
-                        diff_b.append(d_b)
-
-                    diff_w.reverse()
-                    diff_b.reverse()
-
-                    for i in range(len(self.weights)):
-                        self.weights[i] = self.weights[i] - learning_rate * diff_w[i]
-                        self.bias[i] = self.bias[i] - learning_rate * diff_b[i]
+                for i in range(len(self.weights)):
+                    self.weights[i] = self.weights[i] - learning_rate * diff_w[i]
+                    self.bias[i] = self.bias[i] - learning_rate * diff_b[i]
 
 
 # Variables
@@ -181,18 +196,19 @@ batch_size = 32
 
 # Initialise the hidden layers
 hidden_layers = [
-    # Layer(10, Layer.logistic, Layer.logistic_deriv),
-    # Layer(10, Layer.reLU, Layer.reLU_deriv),
-    Layer(10, Layer.gauss, Layer.gauss_deriv)
+    Layer(6, Layer.logistic, Layer.logistic_deriv),
+    # Layer(4, Layer.reLU, Layer.reLU_deriv),
+    # Layer(10, Layer.gauss, Layer.gauss_deriv),
+    Layer(10, Layer.reLU, Layer.reLU_deriv),
 ]
 
 output_type = 'classification'
 # output_type = 'regression'
+# train_file = 'data/classification/data.three_gauss.train.1000.csv'
+# test_file = 'data/classification/data.three_gauss.test.500.csv'
+
 train_file = 'data/classification/data.three_gauss.train.1000.csv'
 test_file = 'data/classification/data.three_gauss.test.500.csv'
-
-# train_file = 'data/classification/data.simple.train.1000.csv'
-# test_file = 'data/classification/data.simple.test.500.csv'
 
 network = NeuralNetwork(train_file, test_file, hidden_layers, output_type)
 network.train(epoch_count, batch_size, learning_rate)
