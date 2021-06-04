@@ -34,15 +34,20 @@ class Layer:
         return x - target
 
     @staticmethod
+    def gauss(x):
+        return np.exp(-x*x)
+
+    @staticmethod
+    def gauss_deriv(x):
+        return - 2 * x * Layer.gauss(x)
+
+    @staticmethod
     def identity(x, target):
         return x
 
 
 class NeuralNetwork:
-    def __init__(self, train_file, test_file, hidden_layers, network_type, epoch_count, batch_size, learning_rate):
-        self.epoch_count = epoch_count
-        self.batch_size = batch_size
-        self.learning_rate = learning_rate
+    def __init__(self, train_file, test_file, hidden_layers, network_type):
 
         self.x_train, self.y_train, self.training_count = self.train_test_from_file(train_file)
         self.x_test, self.y_test, self.test_count = self.train_test_from_file(test_file)
@@ -129,15 +134,15 @@ class NeuralNetwork:
 
         return res
 
-    def train(self):
+    def train(self, epoch_count, batch_size, learning_rate):
         for epoch in range(epoch_count):
-            if epoch % 1 == 0:
+            if epoch % 10 == 0:
                 accuracy = self.test()
                 print("Epoch {}, accuracy: {}".format(epoch, accuracy))
 
             # Iteratively picking up points in a batch
-            for index in range(0, self.training_count, self.batch_size):
-                for point in range(index, min(index + self.batch_size, self.training_count)):
+            for index in range(0, self.training_count, batch_size):
+                for point in range(index, min(index + batch_size, self.training_count)):
                     output, pre_activations, post_activations = self.forward_propagate(self.layers, self.weights, self.bias, self.x_train[:, point])
 
                     # Backpropagation
@@ -171,19 +176,23 @@ class NeuralNetwork:
 # Variables
 learning_rate = 0.1
 
-epoch_count = 100
+epoch_count = 200
 batch_size = 32
 
 # Initialise the hidden layers
 hidden_layers = [
-    # Layer(4, Layer.logistic, Layer.logistic_deriv),
-    Layer(3, Layer.reLU, Layer.reLU_deriv),
+    # Layer(10, Layer.logistic, Layer.logistic_deriv),
+    # Layer(10, Layer.reLU, Layer.reLU_deriv),
+    Layer(10, Layer.gauss, Layer.gauss_deriv)
 ]
 
 output_type = 'classification'
 # output_type = 'regression'
-train_file = 'data/classification/data.simple.train.100.csv'
-test_file = 'data/classification/data.simple.test.100.csv'
+train_file = 'data/classification/data.three_gauss.train.1000.csv'
+test_file = 'data/classification/data.three_gauss.test.500.csv'
 
-network = NeuralNetwork(train_file, test_file, hidden_layers, output_type, epoch_count, batch_size, learning_rate)
-network.train()
+# train_file = 'data/classification/data.simple.train.1000.csv'
+# test_file = 'data/classification/data.simple.test.500.csv'
+
+network = NeuralNetwork(train_file, test_file, hidden_layers, output_type)
+network.train(epoch_count, batch_size, learning_rate)
